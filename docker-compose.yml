@@ -1,0 +1,168 @@
+# ==============================================================================
+# The Lenny Growth Assistant - Docker Compose Topology
+# Evaluator-friendly, reproducible container deployment for Windows 8 GB RAM hosts
+#
+# Ports (Non-conflicting with native host development):
+#   - Frontend Application: http://localhost:8080
+#   - FastAPI Backend API:  http://localhost:8001 (Docs: http://localhost:8001/api/docs)
+#   - Database (PostgreSQL): Internal Docker network only (Preserves host port 5432)
+#   - Pi SDK Daemon:        Internal Docker network only (Preserves host port 8765)
+#   - Ollama (LLM):          Windows Host at http://host.docker.internal:11434
+# ==============================================================================
+
+name: lenny-growth-assistant
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. PostgreSQL Relational & Vector Database (pgvector)
+  # ----------------------------------------------------------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: lenny-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lenny_growth_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      # Isolated dedicated named volume (Never touches host Windows PostgreSQL data)
+      - lenny_db_data:/var/lib/postgresql/data
+    # Port 5432 is kept strictly internal to prevent conflicts with host PostgreSQL
+    expose:
+      - "5432"
+    networks:
+      - lenny_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lenny_growth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  # ----------------------------------------------------------------------------
+  # 2. Pi Coding Agent SDK Bridge Microservice (Node.js/TypeScript)
+  # ----------------------------------------------------------------------------
+  pi-agent:
+    build:
+      context: ./pi-agent-service
+      dockerfile: Dockerfile
+    container_name: lenny-pi-agent
+    restart: unless-stopped
+    environment:
+      PORT: 8765
+      HOST: 0.0.0.0
+      PI_AGENT_HOST: 0.0.0.0
+      PI_AGENT_PORT: 8765
+      OLLAMA_BASE_URL: http://host.docker.internal:11434/v1
+      PI_AGENT_MODEL: qwen2.5:1.5b
+      PI_AGENT_TIMEOUT_MS: 180000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose:
+      - "8765"
+    networks:
+      - lenny_network
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:8765/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  # ----------------------------------------------------------------------------
+  # 3. FastAPI Python Backend Service
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: lenny-backend
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      APP_NAME: "Lenny Growth Assistant"
+      DEBUG: "true"
+      HOST: 0.0.0.0
+      PORT: 8000
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/lenny_growth_db
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      PI_AGENT_SERVICE_URL: http://pi-agent:8765
+      PI_AGENT_ENABLED: "true"
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-ollama}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_MAX_TOKENS: 2500
+      ALLOWED_CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      # Safe, non-conflicting host port 8001 (Leaves host port 8000 free)
+      - "8001:8000"
+    volumes:
+      # Optional read-only mount for host transcript data if present
+      - ./data/raw_transcripts:/app/data/raw_transcripts:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      pi-agent:
+        condition: service_healthy
+    networks:
+      - lenny_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health/live || python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/live')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  # ----------------------------------------------------------------------------
+  # 4. React Production Frontend (Nginx SPA + Reverse Proxy)
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lenny-frontend
+    restart: unless-stopped
+    ports:
+      # Safe, non-conflicting host port 8080 (Leaves host port 5173 free)
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - lenny_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+# ------------------------------------------------------------------------------
+# Volumes & Networks
+# ------------------------------------------------------------------------------
+volumes:
+  # Dedicated, isolated volume strictly for the Dockerized database
+  lenny_db_data:
+    name: lenny_postgres_data
+
+networks:
+  lenny_network:
+    name: lenny_app_network
+    driver: bridge

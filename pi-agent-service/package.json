@@ -1,0 +1,25 @@
+{
+  "name": "pi-coding-agent-service",
+  "version": "1.0.0",
+  "description": "Isolated Node.js/TypeScript runtime bridge for @earendil-works/pi-coding-agent in The Lenny Growth Assistant",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "serve": "node dist/server.js"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.8.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}

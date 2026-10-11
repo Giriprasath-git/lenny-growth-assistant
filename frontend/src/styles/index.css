@@ -1,0 +1,171 @@
+@import './tokens.css';
+
+/* ==============================================================================
+   Global Resets & Base Typography (Professional Light Theme)
+   ============================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  font-family: 'Inter', 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom Sleek Light Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(118, 84, 247, 0.18);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(118, 84, 247, 0.35);
+}
+
+/* Code Fonts */
+code, pre, kbd {
+  font-family: 'JetBrains Mono', 'Fira Code', Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+/* Application Container */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: var(--bg-app);
+  overflow: hidden;
+}
+
+/* Workspace Layout with Dynamic Draggable Splitters */
+.workspace-container {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-app);
+}
+
+.workspace-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.workspace-panel.panel-left {
+  flex-shrink: 0;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.workspace-panel.panel-center {
+  flex: 1 1 0;
+  min-width: 380px;
+  background: var(--bg-surface);
+}
+
+.workspace-panel.panel-right {
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* Draggable Splitters (Splitter A and Splitter B) */
+.workspace-splitter {
+  width: 8px;
+  height: 100%;
+  position: relative;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  user-select: none;
+  touch-action: none;
+  z-index: 15;
+  transition: background var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace-splitter::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: var(--border-subtle);
+  transition: all var(--transition-fast);
+}
+
+.workspace-splitter:hover::after,
+.workspace-splitter.is-dragging::after {
+  background: var(--primary-purple);
+  width: 3px;
+  left: 2.5px;
+  box-shadow: 0 0 8px var(--accent-purple-glow);
+}
+
+.workspace-splitter:focus-visible {
+  outline: 2px solid var(--primary-purple);
+  outline-offset: -1px;
+}
+
+.splitter-handle {
+  width: 4px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: var(--border-medium);
+  z-index: 2;
+  transition: all var(--transition-fast);
+  pointer-events: none;
+}
+
+.workspace-splitter:hover .splitter-handle,
+.workspace-splitter.is-dragging .splitter-handle {
+  background: var(--primary-purple);
+  height: 48px;
+  box-shadow: 0 0 10px var(--accent-purple-glow);
+}
+
+/* Animation utilities */
+@keyframes pulseSubtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.anim-pulse {
+  animation: pulseSubtle 1.8s infinite ease-in-out;
+}

@@ -1,0 +1,28 @@
+{
+  "project": "The Lenny Growth Assistant",
+  "version": "0.1.0",
+  "environment_defaults": {
+    "cloud_model": "claude-3-5-sonnet-20241022",
+    "cloud_model_note": "Configurable model identifier; availability verified during integration phase",
+    "local_model": "llama3.2:3b",
+    "embedding_model": "nomic-embed-text",
+    "embedding_dimension": 768
+  },
+  "retrieval_defaults": {
+    "top_k": 5,
+    "chunk_size": 500,
+    "chunk_overlap": 100
+  },
+  "skills": {
+    "ship30": {
+      "enabled_by_default": false,
+      "target_words_per_essay": 1250,
+      "hook_styles": [
+        "How-To Without Pain",
+        "Counterintuitive Truth",
+        "Framework Step-by-Step",
+        "Common Failure Modes"
+      ]
+    }
+  }
+}

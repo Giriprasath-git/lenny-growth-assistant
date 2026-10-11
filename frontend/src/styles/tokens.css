@@ -1,0 +1,82 @@
+/* ==============================================================================
+   The Lenny Growth Assistant - Design Tokens & Aesthetic System
+   Aesthetic: SaaS Professional Light Theme (Soft Lavender, Clean Cards, Violet Accents)
+   ============================================================================== */
+
+:root {
+  /* Surface & Background Hierarchy */
+  --bg-app: #F4F3FF;
+  --bg-canvas: #F4F3FF;
+  --bg-sidebar: #F8F7FF;
+  --bg-surface: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F8F7FF;
+  --bg-card-active: #EEE9FF;
+  --bg-input: #FFFFFF;
+  --bg-glass: rgba(255, 255, 255, 0.85);
+  --bg-glass-heavy: rgba(255, 255, 255, 0.95);
+
+  /* Primary Brand Purple Palette */
+  --primary-purple: #7654F7;
+  --secondary-purple: #A24FF3;
+  --accent-purple-bg: #EEE9FF;
+  --accent-purple-light: #F0EEFF;
+  --accent-purple-hover: #6340E8;
+  --accent-purple-glow: rgba(118, 84, 247, 0.22);
+  --accent-purple-subtle: rgba(118, 84, 247, 0.08);
+
+  /* Primary Actions Gradient */
+  --gradient-primary: linear-gradient(135deg, #7654F7 0%, #A24FF3 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #6842EB 0%, #943CE0 100%);
+  --gradient-card: linear-gradient(180deg, #FFFFFF 0%, #F8F7FF 100%);
+
+  /* Secondary Accents */
+  --accent-blue: #3B82F6;
+  --accent-blue-subtle: rgba(59, 130, 246, 0.08);
+  --accent-amber: #D97706;
+  --accent-amber-subtle: rgba(217, 119, 6, 0.08);
+
+  /* Functional Status Colors */
+  --status-success: #0CA88A;
+  --status-success-bg: rgba(12, 168, 138, 0.10);
+  --status-warning: #D97706;
+  --status-warning-bg: rgba(217, 119, 6, 0.10);
+  --status-error: #DC3545;
+  --status-error-bg: rgba(220, 53, 69, 0.10);
+  --status-info: #7654F7;
+  --status-info-bg: #EEE9FF;
+
+  /* Typography Colors */
+  --text-main: #292744;
+  --text-primary: #292744;
+  --text-secondary: #6D6B88;
+  --text-muted: #8E8CA8;
+  --text-on-accent: #FFFFFF;
+  --text-purple: #7654F7;
+
+  /* Borders & Dividers */
+  --border-subtle: #E4E1F3;
+  --border-medium: #D5D0ED;
+  --border-active: #7654F7;
+  --border-focus: rgba(118, 84, 247, 0.5);
+
+  /* Shadows & Elevation */
+  --shadow-xs: 0 1px 2px rgba(41, 39, 68, 0.04);
+  --shadow-sm: 0 2px 6px rgba(41, 39, 68, 0.06), 0 1px 2px rgba(41, 39, 68, 0.04);
+  --shadow-md: 0 6px 18px rgba(41, 39, 68, 0.08), 0 2px 6px rgba(41, 39, 68, 0.04);
+  --shadow-lg: 0 16px 40px rgba(41, 39, 68, 0.12), 0 4px 12px rgba(41, 39, 68, 0.06);
+  --shadow-purple: 0 4px 16px rgba(118, 84, 247, 0.28);
+  --backdrop-blur: blur(12px);
+
+  /* Radii */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 9999px;
+
+  /* Transitions */
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}

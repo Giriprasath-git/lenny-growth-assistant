@@ -1,0 +1,3 @@
+"""
+Transcript ingestion pipeline package.
+"""

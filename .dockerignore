@@ -1,0 +1,54 @@
+# ==============================================================================
+# The Lenny Growth Assistant - Root .dockerignore
+# Keeps Docker build contexts lightweight, fast, and secure on 8 GB RAM machines
+# ==============================================================================
+
+# Git and IDE metadata
+.git/
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+.gemini/
+
+# Secrets and environment files (CRITICAL: Never embed secrets in images)
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.cert
+
+# Private development documentation and agile notes
+private-docs/
+*.private.md
+scratch/
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node & Frontend dependencies and build caches
+node_modules/
+**/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Raw dataset (Mounted into containers via volume, excluded from build context)
+data/raw_transcripts/
+data/processed/
+
+# Local database dumps
+*.sql
+*.dump
