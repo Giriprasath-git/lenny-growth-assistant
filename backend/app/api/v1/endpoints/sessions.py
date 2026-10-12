@@ -23,6 +23,7 @@ from backend.app.schemas.session import (
     SessionCreateRequest,
     SessionListResponse,
     SessionResponse,
+    SessionUpdateRequest,
     SessionWithMessagesResponse,
 )
 
@@ -166,7 +167,62 @@ async def delete_session(
 
 
 # ------------------------------------------------------------------------------
-# 5. POST /sessions/{session_id}/messages - Store Message in Session
+# 5. PATCH /sessions/{session_id} - Update Session Metadata (title, skill, etc.)
+# ------------------------------------------------------------------------------
+@router.patch(
+    "/{session_id}",
+    response_model=SessionResponse,
+    summary="Partially update a chat session (title, metadata, active_skill)",
+)
+async def update_session(
+    session_id: uuid.UUID,
+    payload: SessionUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ChatSession:
+    """
+    Applies a partial update to an existing session.
+    - Only non-None payload fields are applied.
+    - Refuses to overwrite a meaningful (user-defined) title with the generic
+      placeholder 'New Conversation' to prevent accidental regressions.
+    - Bumps updated_at timestamp so the session surfaces at the top of the list.
+    """
+    query = select(ChatSession).where(ChatSession.id == session_id)
+    result = await db.execute(query)
+    session_obj = result.scalar_one_or_none()
+
+    if not session_obj:
+        raise SessionNotFoundError(str(session_id))
+
+    if payload.title is not None:
+        new_title = payload.title.strip()
+        current_is_generic = session_obj.title in ("New Conversation", "", None)
+        incoming_is_generic = new_title in ("New Conversation", "")
+        # Apply title when: (a) current is generic, or (b) new title is not the
+        # placeholder (prevents clobbering a real user-defined title).
+        if current_is_generic or not incoming_is_generic:
+            session_obj.title = new_title
+
+    if payload.user_metadata is not None:
+        session_obj.user_metadata = payload.user_metadata
+
+    if payload.active_skill is not None:
+        session_obj.active_skill = payload.active_skill
+
+    session_obj.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    await db.refresh(session_obj)
+
+    logger.info(
+        "Updated session %s: title=%r active_skill=%r",
+        str(session_id),
+        session_obj.title,
+        session_obj.active_skill,
+    )
+    return session_obj
+
+
+# ------------------------------------------------------------------------------
+# 6. POST /sessions/{session_id}/messages - Store Message in Session
 # ------------------------------------------------------------------------------
 @router.post(
     "/{session_id}/messages",

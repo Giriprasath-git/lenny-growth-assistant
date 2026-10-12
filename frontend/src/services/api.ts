@@ -146,6 +146,27 @@ export async function deleteSession(sessionId: string): Promise<void> {
   }
 }
 
+/**
+ * Persists a new title for the given session via PATCH /sessions/{id}.
+ * Returns the updated ChatSession on success.
+ * Callers should handle failure gracefully — a title update failure must
+ * never break the chat turn flow.
+ */
+export async function updateSessionTitle(
+  sessionId: string,
+  title: string
+): Promise<import('../types/chat').ChatSession> {
+  const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  if (!response.ok) {
+    throw await parseError(response, `Failed to update title for session ${sessionId}`);
+  }
+  return response.json();
+}
+
 export async function createSessionMessage(
   sessionId: string,
   role: 'user' | 'assistant' | 'system',

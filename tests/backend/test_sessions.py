@@ -240,3 +240,116 @@ async def test_list_session_messages_not_found(client: AsyncClient):
     random_id = uuid.uuid4()
     response = await client.get(f"/api/v1/sessions/{random_id}/messages")
     assert response.status_code == 404
+
+
+# ==============================================================================
+# PATCH /sessions/{session_id} — Title Persistence Tests
+# ==============================================================================
+
+@pytest.mark.asyncio
+async def test_patch_session_title_persisted(client: AsyncClient):
+    """
+    Verifies that PATCH /api/v1/sessions/{id} persists a title to the database.
+    After patching, a subsequent GET must return the updated title.
+    """
+    # Create session with the generic default title
+    create_res = await client.post("/api/v1/sessions", json={"title": "New Conversation"})
+    assert create_res.status_code == 201
+    session_id = create_res.json()["id"]
+
+    # Derive a meaningful title from the first user message (simulates frontend flow)
+    derived_title = "How do product-led growth companies build viral loops?"
+
+    patch_res = await client.patch(
+        f"/api/v1/sessions/{session_id}",
+        json={"title": derived_title},
+    )
+    assert patch_res.status_code == 200
+    assert patch_res.json()["title"] == derived_title
+
+    # Verify the title was durably persisted by fetching the session independently
+    get_res = await client.get(f"/api/v1/sessions/{session_id}")
+    assert get_res.status_code == 200
+    assert get_res.json()["title"] == derived_title
+
+
+@pytest.mark.asyncio
+async def test_patch_session_title_does_not_overwrite_meaningful_title(client: AsyncClient):
+    """
+    Verifies the protection rule: a meaningful user-defined title must not be
+    overwritten by a PATCH request that sends the generic 'New Conversation'
+    placeholder (guards against accidental regressions).
+    """
+    # Create session with a meaningful title already
+    create_res = await client.post("/api/v1/sessions", json={"title": "Retention loops for B2B SaaS"})
+    session_id = create_res.json()["id"]
+    original_title = create_res.json()["title"]
+
+    # Attempt to overwrite with the generic placeholder
+    patch_res = await client.patch(
+        f"/api/v1/sessions/{session_id}",
+        json={"title": "New Conversation"},
+    )
+    assert patch_res.status_code == 200
+    # The backend should reject the downgrade and keep the original meaningful title
+    assert patch_res.json()["title"] == original_title
+
+    # Verify persisted title was not clobbered
+    get_res = await client.get(f"/api/v1/sessions/{session_id}")
+    assert get_res.json()["title"] == original_title
+
+
+@pytest.mark.asyncio
+async def test_patch_session_unknown_id_returns_404(client: AsyncClient):
+    """
+    Verifies that PATCH /api/v1/sessions/{unknown_id} returns 404
+    for a session UUID that does not exist in the database.
+    """
+    unknown_id = str(uuid.uuid4())
+    patch_res = await client.patch(
+        f"/api/v1/sessions/{unknown_id}",
+        json={"title": "Ghost Session Title"},
+    )
+    assert patch_res.status_code == 404
+    data = patch_res.json()
+    assert data["error"] is True
+    assert "not found" in data["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_existing_chat_flow_title_handling_compatible(client: AsyncClient):
+    """
+    Regression test: verifies that the standard session create → message post
+    → PATCH title flow works end-to-end without breaking existing behaviour.
+    Chat generation does NOT need the PATCH to succeed for messages to persist.
+    """
+    # Create a new session (frontend always starts with 'New Conversation')
+    create_res = await client.post(
+        "/api/v1/sessions",
+        json={"title": "New Conversation", "provider": "ollama"},
+    )
+    assert create_res.status_code == 201
+    session_id = create_res.json()["id"]
+    assert create_res.json()["title"] == "New Conversation"
+
+    # Simulate storing the first user message (happens inside the chat endpoint)
+    msg_res = await client.post(
+        f"/api/v1/sessions/{session_id}/messages",
+        json={"role": "user", "content": "What is activation in product-led growth?"},
+    )
+    assert msg_res.status_code == 201
+
+    # Frontend derives the title and calls the PATCH endpoint
+    derived_title = "What is activation in product-led grow..."
+    patch_res = await client.patch(
+        f"/api/v1/sessions/{session_id}",
+        json={"title": derived_title},
+    )
+    assert patch_res.status_code == 200
+    assert patch_res.json()["title"] == derived_title
+
+    # Messages are intact and session title is updated
+    get_res = await client.get(f"/api/v1/sessions/{session_id}")
+    assert get_res.json()["title"] == derived_title
+    assert len(get_res.json()["messages"]) == 1
+

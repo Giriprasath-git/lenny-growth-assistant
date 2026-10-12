@@ -542,6 +542,36 @@
   color: var(--primary-purple);
 }
 
+/* Thin reopen tab shown at the left edge when the sidebar is collapsed */
+.sidebar-reopen-tab {
+  width: 20px;
+  height: 100%;
+  background: var(--surface-raised);
+  border: none;
+  border-right: 2px solid var(--border-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  padding: 0;
+  z-index: 20;
+}
+
+.sidebar-reopen-tab:hover {
+  background: var(--accent-purple-bg);
+  color: var(--primary-purple);
+  border-right-color: var(--primary-purple);
+}
+
+.sidebar-reopen-tab:focus-visible {
+  outline: 2px solid var(--primary-purple);
+  outline-offset: -2px;
+}
+
 .session-list {
   display: flex;
   flex-direction: column;

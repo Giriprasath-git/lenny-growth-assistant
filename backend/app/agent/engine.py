@@ -120,6 +120,100 @@ class AgentTool:
         self.parameters = parameters
 
 
+def is_model_compatible_with_provider(provider_name: str, model_name: Optional[str]) -> bool:
+    """
+    Checks whether a given model_name belongs to or is valid for provider_name.
+    Prevents cross-provider pollution (e.g. sending Gemini models to Ollama or vice-versa).
+    """
+    if not model_name or not isinstance(model_name, str):
+        return False
+
+    clean_model = model_name.strip().lower()
+    if not clean_model:
+        return False
+
+    norm_provider = provider_name.strip().lower()
+
+    if norm_provider in ("cloud", "gemini"):
+        # Google Gemini models must start with 'gemini'
+        return clean_model.startswith("gemini")
+
+    if norm_provider == "anthropic":
+        # Anthropic Claude models must start with 'claude'
+        return clean_model.startswith("claude")
+
+    if norm_provider in ("ollama", "pi_agent"):
+        # Local Ollama and Pi Agent models must NOT be proprietary cloud models
+        if clean_model.startswith(("gemini", "claude", "gpt-", "text-embedding")):
+            return False
+        return True
+
+    return True
+
+
+def get_default_model_for_provider(provider_name: str) -> str:
+    """Returns the default model configured for the specified provider."""
+    norm = provider_name.strip().lower()
+    if norm in ("cloud", "gemini"):
+        return settings.GEMINI_MODEL
+    elif norm == "anthropic":
+        return settings.ANTHROPIC_MODEL
+    elif norm == "pi_agent":
+        return settings.PI_AGENT_MODEL
+    elif norm == "ollama":
+        return settings.OLLAMA_MODEL
+    else:
+        return settings.OLLAMA_MODEL
+
+
+def resolve_provider_and_model(
+    requested_provider: Optional[str] = None,
+    requested_model: Optional[str] = None,
+    session_provider: Optional[str] = None,
+    session_model_name: Optional[str] = None,
+) -> tuple:
+    """
+    Resolves the active provider and model in a strictly provider-aware manner.
+
+    Rules:
+    1. Explicit requested_provider takes precedence over session_provider, falling back to DEFAULT_LLM_PROVIDER.
+    2. If a valid explicit requested_model is provided that is compatible with the resolved provider, use it.
+    3. If an explicit provider switch occurred (requested_provider differs from session_provider),
+       session.model_name belongs to the old provider and is NOT reused; use the new provider's default model.
+    4. If continuing on the same provider (or no provider switch occurred), reuse session.model_name
+       ONLY if it belongs to/is compatible with the resolved provider.
+    5. Always guard against cross-provider pollution: never send Gemini models to Ollama or Ollama models to Gemini.
+    """
+    if requested_provider:
+        provider_name = requested_provider.strip().lower()
+    elif session_provider:
+        provider_name = session_provider.strip().lower()
+    else:
+        provider_name = settings.DEFAULT_LLM_PROVIDER.lower()
+
+    def _norm(p: Optional[str]) -> str:
+        if not p:
+            return ""
+        pl = p.strip().lower()
+        return "cloud" if pl in ("cloud", "gemini") else pl
+
+    # Check whether an explicit provider switch occurred
+    is_explicit_switch = (
+        requested_provider is not None
+        and session_provider is not None
+        and _norm(requested_provider) != _norm(session_provider)
+    )
+
+    if requested_model and is_model_compatible_with_provider(provider_name, requested_model):
+        model_name = requested_model
+    elif not is_explicit_switch and session_model_name and is_model_compatible_with_provider(provider_name, session_model_name):
+        model_name = session_model_name
+    else:
+        model_name = get_default_model_for_provider(provider_name)
+
+    return provider_name, model_name
+
+
 class AgentEngine:
     """
     Core agent orchestrator for Grounded Question Answering.
@@ -182,13 +276,36 @@ class AgentEngine:
             },
         )
 
+    @staticmethod
+    def is_model_compatible_with_provider(provider_name: str, model_name: Optional[str]) -> bool:
+        return is_model_compatible_with_provider(provider_name, model_name)
+
+    @staticmethod
+    def get_default_model_for_provider(provider_name: str) -> str:
+        return get_default_model_for_provider(provider_name)
+
+    @classmethod
+    def resolve_provider_and_model(
+        cls,
+        requested_provider: Optional[str] = None,
+        requested_model: Optional[str] = None,
+        session_provider: Optional[str] = None,
+        session_model_name: Optional[str] = None,
+    ) -> tuple:
+        return resolve_provider_and_model(
+            requested_provider=requested_provider,
+            requested_model=requested_model,
+            session_provider=session_provider,
+            session_model_name=session_model_name,
+        )
+
     def get_provider(
         self,
         provider_override: Optional[str] = None,
         model_override: Optional[str] = None,
     ) -> BaseLLMProvider:
         """
-        Resolves active LLM provider adapter.
+        Resolves active LLM provider adapter in a provider-safe manner.
         - 'ollama' (default): Local Ollama (qwen2.5:1.5b default, 180s timeout)
         - 'cloud': Google Gemini (gemini-3.5-flash-lite default)
         - 'gemini': Explicit alias for Gemini cloud provider
@@ -196,16 +313,32 @@ class AgentEngine:
         """
         chosen = (provider_override or self.provider_type).lower()
         if chosen == "ollama":
-            model = model_override or settings.OLLAMA_MODEL
+            model = (
+                model_override
+                if model_override and is_model_compatible_with_provider("ollama", model_override)
+                else settings.OLLAMA_MODEL
+            )
             return OllamaProvider(model=model, timeout=settings.OLLAMA_REQUEST_TIMEOUT)
         elif chosen in ("cloud", "gemini"):
-            model = model_override or settings.GEMINI_MODEL
+            model = (
+                model_override
+                if model_override and is_model_compatible_with_provider("cloud", model_override)
+                else settings.GEMINI_MODEL
+            )
             return GeminiProvider(model=model)
         elif chosen == "anthropic":
-            model = model_override or settings.ANTHROPIC_MODEL
+            model = (
+                model_override
+                if model_override and is_model_compatible_with_provider("anthropic", model_override)
+                else settings.ANTHROPIC_MODEL
+            )
             return CloudAnthropicProvider(model=model)
         elif chosen == "pi_agent":
-            model = model_override or settings.PI_AGENT_MODEL
+            model = (
+                model_override
+                if model_override and is_model_compatible_with_provider("pi_agent", model_override)
+                else settings.PI_AGENT_MODEL
+            )
             return PiAgentProvider(
                 model=model,
                 base_url=settings.PI_AGENT_SERVICE_URL,
@@ -319,23 +452,13 @@ class AgentEngine:
         if not session:
             raise SessionNotFoundError(str(session_id))
 
-        # 2. Resolve Provider & Model
-        provider_name = (provider or session.provider or settings.DEFAULT_LLM_PROVIDER).lower()
-        if provider_name in ("cloud", "gemini"):
-            if model:
-                model_name = model
-            elif session.model_name and not session.model_name.startswith("claude") and session.model_name != settings.OLLAMA_MODEL:
-                model_name = session.model_name
-            else:
-                model_name = settings.GEMINI_MODEL
-        elif provider_name == "anthropic":
-            model_name = model or session.model_name or settings.ANTHROPIC_MODEL
-        elif provider_name == "pi_agent":
-            model_name = model or session.model_name or settings.PI_AGENT_MODEL
-        elif provider_name == "ollama":
-            model_name = model or session.model_name or settings.OLLAMA_MODEL
-        else:
-            model_name = model or session.model_name
+        # 2. Resolve Provider & Model in a Provider-Aware Manner
+        provider_name, model_name = self.resolve_provider_and_model(
+            requested_provider=provider,
+            requested_model=model,
+            session_provider=session.provider,
+            session_model_name=session.model_name,
+        )
 
         llm_provider = self.get_provider(provider_override=provider_name, model_override=model_name)
 
@@ -470,7 +593,9 @@ class AgentEngine:
             db.add(citation_record)
             persisted_citations.append(citation_record)
 
-        # 7d. Update Session Timestamp
+        # 7d. Update Session Provider, Model, and Timestamp
+        session.provider = provider_name
+        session.model_name = model_name
         session.updated_at = datetime.now(timezone.utc)
         await db.commit()
 

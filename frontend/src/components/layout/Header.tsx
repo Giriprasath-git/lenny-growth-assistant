@@ -26,11 +26,8 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleShip30,
   sdkStatus,
   dbHealthy = true,
-  isSidebarOpen = true,
-  onToggleSidebar,
-  isSidePanelOpen = true,
-  onToggleSidePanel,
-  onResetLayout,
+  // isSidebarOpen, onToggleSidebar, isSidePanelOpen, onToggleSidePanel, onResetLayout
+  // are accepted as props for API compatibility but not rendered (layout controls removed).
 }) => {
   const cloudConfig = sdkStatus?.cloud_configuration;
   const isCloudConfigured = Boolean(cloudConfig?.configured);
@@ -136,43 +133,6 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="health-text">{dbHealthy ? 'Ready' : 'DB Offline'}</span>
         </div>
 
-        {/* Layout Preferences & Panel Controls */}
-        <div className="layout-controls-group">
-          {onToggleSidebar && (
-            <button
-              type="button"
-              className={`layout-tool-btn ${isSidebarOpen ? 'active' : ''}`}
-              onClick={onToggleSidebar}
-              title={isSidebarOpen ? 'Collapse conversation sidebar' : 'Open conversation sidebar'}
-              aria-label="Toggle sidebar"
-            >
-              {isSidebarOpen ? '◀ Sidebar' : 'Sidebar ▶'}
-            </button>
-          )}
-
-          {onResetLayout && (
-            <button
-              type="button"
-              className="layout-tool-btn"
-              onClick={onResetLayout}
-              title="Reset workspace panels to balanced default widths"
-            >
-              🔄 Reset
-            </button>
-          )}
-
-          {onToggleSidePanel && (
-            <button
-              type="button"
-              className={`layout-tool-btn ${isSidePanelOpen ? 'active' : ''}`}
-              onClick={onToggleSidePanel}
-              title={isSidePanelOpen ? 'Collapse sources & artifact panel' : 'Open sources & artifact panel'}
-              aria-label="Toggle inspector panel"
-            >
-              {isSidePanelOpen ? 'Inspector ▶' : '◀ Inspector'}
-            </button>
-          )}
-        </div>
       </div>
     </header>
   );

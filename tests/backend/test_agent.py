@@ -577,3 +577,188 @@ async def test_multi_turn_contextual_query_expansion():
     resolved_3 = engine._resolve_retrieval_query(q3, hist_turn_1)
     assert resolved_3 == q3
 
+
+# ==============================================================================
+# 11. Provider Switching & Provider-Aware Model Selection Regression Tests
+# ==============================================================================
+
+def test_provider_aware_switching_cloud_gemini_to_local_ollama():
+    """
+    CRITICAL REGRESSION TEST:
+    Verifies that switching from Cloud Gemini to Local Ollama in an existing conversation
+    uses settings.OLLAMA_MODEL ('qwen2.5:1.5b') and NEVER passes 'gemini-3.5-flash-lite'
+    to Ollama (which caused HTTP 404: model not found).
+    """
+    provider_name, model_name = AgentEngine.resolve_provider_and_model(
+        requested_provider="ollama",
+        requested_model=None,
+        session_provider="cloud",
+        session_model_name="gemini-3.5-flash-lite",
+    )
+    assert provider_name == "ollama"
+    assert model_name == settings.OLLAMA_MODEL
+    assert "gemini" not in model_name
+
+
+def test_provider_aware_switching_local_ollama_to_cloud_gemini():
+    """
+    CRITICAL REGRESSION TEST:
+    Verifies that switching from Local Ollama to Cloud Gemini in an existing conversation
+    uses settings.GEMINI_MODEL ('gemini-3.5-flash-lite') and NEVER passes 'qwen2.5:1.5b'
+    to Gemini.
+    """
+    provider_name, model_name = AgentEngine.resolve_provider_and_model(
+        requested_provider="cloud",
+        requested_model=None,
+        session_provider="ollama",
+        session_model_name="qwen2.5:1.5b",
+    )
+    assert provider_name == "cloud"
+    assert model_name == settings.GEMINI_MODEL
+    assert "qwen" not in model_name
+
+
+def test_provider_aware_switching_local_to_pi_sdk_and_back():
+    """
+    Verifies switching Local -> Pi SDK -> Local within the same saved conversation
+    routes to the proper default model for each provider mode.
+    """
+    # 1. Switch from Local to Pi SDK
+    p1, m1 = AgentEngine.resolve_provider_and_model(
+        requested_provider="pi_agent",
+        requested_model=None,
+        session_provider="ollama",
+        session_model_name="qwen2.5:1.5b",
+    )
+    assert p1 == "pi_agent"
+    assert m1 == settings.PI_AGENT_MODEL
+
+    # 2. Switch from Pi SDK back to Local Ollama
+    p2, m2 = AgentEngine.resolve_provider_and_model(
+        requested_provider="ollama",
+        requested_model=None,
+        session_provider="pi_agent",
+        session_model_name="qwen2.5:1.5b",
+    )
+    assert p2 == "ollama"
+    assert m2 == settings.OLLAMA_MODEL
+
+    # 3. Switch from Cloud Gemini to Pi SDK
+    p3, m3 = AgentEngine.resolve_provider_and_model(
+        requested_provider="pi_agent",
+        requested_model=None,
+        session_provider="cloud",
+        session_model_name="gemini-3.5-flash-lite",
+    )
+    assert p3 == "pi_agent"
+    assert m3 == settings.PI_AGENT_MODEL
+    assert "gemini" not in m3
+
+
+def test_provider_aware_preserves_valid_explicit_model_overrides():
+    """
+    Verifies that valid explicit model overrides for a provider are preserved.
+    """
+    # Valid Ollama model override
+    p_ollama, m_ollama = AgentEngine.resolve_provider_and_model(
+        requested_provider="ollama",
+        requested_model="llama3.2:1b",
+        session_provider="ollama",
+        session_model_name="qwen2.5:1.5b",
+    )
+    assert p_ollama == "ollama"
+    assert m_ollama == "llama3.2:1b"
+
+    # Valid Gemini model override
+    p_cloud, m_cloud = AgentEngine.resolve_provider_and_model(
+        requested_provider="cloud",
+        requested_model="gemini-1.5-pro",
+        session_provider="cloud",
+        session_model_name="gemini-3.5-flash-lite",
+    )
+    assert p_cloud == "cloud"
+    assert m_cloud == "gemini-1.5-pro"
+
+    # Valid Anthropic model override
+    p_ant, m_ant = AgentEngine.resolve_provider_and_model(
+        requested_provider="anthropic",
+        requested_model="claude-3-opus-20240229",
+        session_provider="anthropic",
+        session_model_name="claude-3-5-sonnet-20241022",
+    )
+    assert p_ant == "anthropic"
+    assert m_ant == "claude-3-opus-20240229"
+
+
+def test_provider_aware_rejects_incompatible_model_overrides():
+    """
+    Verifies rule 5: Do not send a Gemini model name to Ollama or an Ollama model name to Gemini,
+    even if passed as an explicit override.
+    """
+    # Attempting to send Gemini model to Ollama -> safely falls back to settings.OLLAMA_MODEL
+    p_ollama, m_ollama = AgentEngine.resolve_provider_and_model(
+        requested_provider="ollama",
+        requested_model="gemini-3.5-flash-lite",
+    )
+    assert p_ollama == "ollama"
+    assert m_ollama == settings.OLLAMA_MODEL
+
+    # Attempting to send Ollama model to Gemini -> safely falls back to settings.GEMINI_MODEL
+    p_cloud, m_cloud = AgentEngine.resolve_provider_and_model(
+        requested_provider="cloud",
+        requested_model="qwen2.5:1.5b",
+    )
+    assert p_cloud == "cloud"
+    assert m_cloud == settings.GEMINI_MODEL
+
+    # Attempting to send Gemini model to Pi SDK -> safely falls back to settings.PI_AGENT_MODEL
+    p_pi, m_pi = AgentEngine.resolve_provider_and_model(
+        requested_provider="pi_agent",
+        requested_model="gemini-3.5-flash-lite",
+    )
+    assert p_pi == "pi_agent"
+    assert m_pi == settings.PI_AGENT_MODEL
+
+
+def test_provider_aware_reuses_session_model_when_compatible_and_same_provider():
+    """
+    Verifies that when continuing on the same provider without an explicit override,
+    compatible session.model_name is preserved.
+    """
+    # Cloud session with custom Gemini model
+    p_cloud, m_cloud = AgentEngine.resolve_provider_and_model(
+        requested_provider=None,
+        requested_model=None,
+        session_provider="cloud",
+        session_model_name="gemini-1.5-pro",
+    )
+    assert p_cloud == "cloud"
+    assert m_cloud == "gemini-1.5-pro"
+
+    # Ollama session with custom Ollama model
+    p_ollama, m_ollama = AgentEngine.resolve_provider_and_model(
+        requested_provider=None,
+        requested_model=None,
+        session_provider="ollama",
+        session_model_name="mistral:7b",
+    )
+    assert p_ollama == "ollama"
+    assert m_ollama == "mistral:7b"
+
+
+def test_get_provider_sanitizes_cross_provider_model_names():
+    """
+    Verifies defense-in-depth: get_provider() refuses to instantiate an OllamaProvider
+    with a Gemini model name or a GeminiProvider with an Ollama model name.
+    """
+    engine = AgentEngine()
+
+    p_ollama = engine.get_provider(provider_override="ollama", model_override="gemini-3.5-flash-lite")
+    assert isinstance(p_ollama, OllamaProvider)
+    assert p_ollama.model == settings.OLLAMA_MODEL
+
+    p_gemini = engine.get_provider(provider_override="cloud", model_override="qwen2.5:1.5b")
+    assert isinstance(p_gemini, GeminiProvider)
+    assert p_gemini.model == settings.GEMINI_MODEL
+
+

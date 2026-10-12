@@ -25,6 +25,7 @@ import {
   fetchSessions,
   sendAgentChatMessage,
   sendChatMessage,
+  updateSessionTitle,
 } from './services/api';
 
 // Layout size constants (in pixels)
@@ -253,6 +254,43 @@ export const App: React.FC = () => {
             setActiveSessionId(firstSession.id);
             // Load messages for the first session
             loadSessionMessages(firstSession.id);
+
+            // --- One-time background title backfill for legacy "New Conversation" sessions ---
+            // Runs after the UI is already populated; capped to 15 to avoid flooding the API.
+            const genericSessions = sessionList.items
+              .filter((s: import('./types/chat').ChatSession) => s.title === 'New Conversation')
+              .slice(0, 15);
+
+            if (genericSessions.length > 0) {
+              // Sequential to avoid parallel DB storms on 8 GB RAM hosts
+              (async () => {
+                for (const s of genericSessions) {
+                  if (!isMounted) break;
+                  try {
+                    const details = await fetchSessionDetails(s.id);
+                    const firstUserMsg = (details.messages || []).find(
+                      (m: import('./types/chat').ChatMessage) => m.role === 'user'
+                    );
+                    if (firstUserMsg && firstUserMsg.content) {
+                      const derived =
+                        firstUserMsg.content.slice(0, 42) +
+                        (firstUserMsg.content.length > 42 ? '...' : '');
+                      await updateSessionTitle(s.id, derived);
+                      if (isMounted) {
+                        setSessions((prev) =>
+                          prev.map((p) => (p.id === s.id ? { ...p, title: derived } : p))
+                        );
+                      }
+                    }
+                    // Empty sessions (no messages) are intentionally skipped — they stay "New Conversation"
+                  } catch (backfillErr) {
+                    // Non-fatal: skip this session silently
+                    console.warn('[title-backfill] skipped session', s.id, backfillErr);
+                  }
+                }
+              })();
+            }
+            // --- End title backfill ---
           } else {
             // Auto-create initial session
             handleNewSession();
@@ -426,13 +464,18 @@ export const App: React.FC = () => {
         return [...filtered, turnResult.user_message, turnResult.assistant_message];
       });
 
-      // Update session title if first turn of a "New Conversation"
+      // Persist title after first turn: if still generic, derive from user message
       const currentSession = sessions.find((s) => s.id === targetSessionId);
       if (currentSession && currentSession.title === 'New Conversation') {
         const derivedTitle = text.slice(0, 42) + (text.length > 42 ? '...' : '');
+        // Immediately update the sidebar (optimistic)
         setSessions((prev) =>
           prev.map((s) => (s.id === targetSessionId ? { ...s, title: derivedTitle } : s))
         );
+        // Persist to PostgreSQL in the background — failure is non-fatal
+        updateSessionTitle(targetSessionId!, derivedTitle).catch((err) => {
+          console.warn('[title-persist] PATCH failed (non-fatal):', err);
+        });
       }
 
       // Select first citation if returned
@@ -549,41 +592,52 @@ export const App: React.FC = () => {
 
       {/* Main Workspace Layout with Resizable Three-Panel Structure */}
       <div className="workspace-container">
-        {/* Left Panel: Conversation Sidebar */}
-        {isSidebarOpen && (
-          <div
-            style={{ width: `${sidebarWidth}px` }}
-            className="workspace-panel panel-left"
-          >
-            <Sidebar
-              sessions={sessions}
-              activeSessionId={activeSessionId}
-              onSelectSession={handleSelectSession}
-              onNewSession={handleNewSession}
-              onDeleteSession={handleDeleteSession}
-              isLoadingSessions={isLoadingSessions}
-              onCollapse={() => setIsSidebarOpen(false)}
-            />
-          </div>
-        )}
+        {/* Left Panel: Conversation Sidebar — always rendered so reopen tab is accessible */}
+        {isSidebarOpen ? (
+          <>
+            <div
+              style={{ width: `${sidebarWidth}px` }}
+              className="workspace-panel panel-left"
+            >
+              <Sidebar
+                sessions={sessions}
+                activeSessionId={activeSessionId}
+                onSelectSession={handleSelectSession}
+                onNewSession={handleNewSession}
+                onDeleteSession={handleDeleteSession}
+                isLoadingSessions={isLoadingSessions}
+                onCollapse={() => setIsSidebarOpen(false)}
+              />
+            </div>
 
-        {/* Splitter A: Between Left Sidebar and Center Chat */}
-        {isSidebarOpen && (
-          <div
-            className={`workspace-splitter splitter-left ${isDraggingLeft ? 'is-dragging' : ''}`}
-            onPointerDown={handleLeftSplitterPointerDown}
-            role="separator"
-            aria-orientation="vertical"
-            aria-valuenow={sidebarWidth}
-            aria-valuemin={MIN_SIDEBAR_WIDTH}
-            aria-valuemax={MAX_SIDEBAR_WIDTH}
-            tabIndex={0}
-            onKeyDown={handleLeftSplitterKeyDown}
-            title="Drag to resize sidebar (or use Left/Right arrow keys)"
-            aria-label="Sidebar resize handle"
+            {/* Splitter A: Between Left Sidebar and Center Chat */}
+            <div
+              className={`workspace-splitter splitter-left ${isDraggingLeft ? 'is-dragging' : ''}`}
+              onPointerDown={handleLeftSplitterPointerDown}
+              role="separator"
+              aria-orientation="vertical"
+              aria-valuenow={sidebarWidth}
+              aria-valuemin={MIN_SIDEBAR_WIDTH}
+              aria-valuemax={MAX_SIDEBAR_WIDTH}
+              tabIndex={0}
+              onKeyDown={handleLeftSplitterKeyDown}
+              title="Drag to resize sidebar (or use Left/Right arrow keys)"
+              aria-label="Sidebar resize handle"
+            >
+              <div className="splitter-handle" />
+            </div>
+          </>
+        ) : (
+          /* Collapsed sidebar: thin reopen tab at the left edge */
+          <button
+            type="button"
+            className="sidebar-reopen-tab"
+            onClick={() => setIsSidebarOpen(true)}
+            title="Open conversation sidebar"
+            aria-label="Open conversation sidebar"
           >
-            <div className="splitter-handle" />
-          </div>
+            ▶
+          </button>
         )}
 
         {/* Center Panel: Main Chat Interface */}
